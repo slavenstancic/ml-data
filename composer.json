@@ -1,0 +1,13 @@
+{
+    "name": "slaven/counter",
+    "description": "Excel/csv counter for ML testing",
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "license": "None"
+}
