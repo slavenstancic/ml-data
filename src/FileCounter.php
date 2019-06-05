@@ -11,9 +11,9 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class FileCounter
 {
     /** @var string */
-    private $dir = __DIR__ . '/../documents/';
+    private const DIR = __DIR__ . '/../documents/';
 
-    private $characters = ['/', ':', ',', '.', ' '];
+    private const CHARACTERS = ['/', ':', ',', '.', ' '];
 
     /**
      * FileCounter constructor.
@@ -30,7 +30,7 @@ class FileCounter
      * @throws \PhpOffice\PhpSpreadsheet\Exception
      * @throws Exception
      */
-    public function countAllFilesData()
+    public function countAllFilesData(): void
     {
         $spreadsheet = new Spreadsheet();
         $alphabet = range('A', 'Z');
@@ -38,11 +38,11 @@ class FileCounter
         $sheetIndex = 0;
 
         foreach ($data as $file => $row) {
-            $newSheet = new Worksheet($spreadsheet, $file);
+            $newSheet = new Worksheet($spreadsheet, substr($file, 0, 28));
             $spreadsheet->addSheet($newSheet, $sheetIndex);
             $spreadsheet->setActiveSheetIndex($sheetIndex);
             $spreadsheet->getActiveSheet()->getDefaultColumnDimension()->setWidth(20);
-            $spreadsheet->getActiveSheet()->getDefaultRowDimension()->setRowHeight(100);
+            $spreadsheet->getActiveSheet()->getDefaultRowDimension()->setRowHeight(150);
 
             foreach ($row as $rowNum => $column) {
                 foreach ($column as $columnNum => $data) {
@@ -73,12 +73,12 @@ class FileCounter
      * @throws \PhpOffice\PhpSpreadsheet\Exception
      * @throws Exception
      */
-    private function iterateFiles()
+    private function iterateFiles(): array
     {
-        $files = array_diff(scandir($this->dir), ['..', '.']);
+        $files = array_diff(scandir(self::DIR), ['..', '.', '.gitkeep']);
         $return = [];
         foreach ($files as $file) {
-            $filePath = $this->dir . $file;
+            $filePath = self::DIR . $file;
             $inputFileType = IOFactory::identify($filePath);
             $reader = IOFactory::createReader($inputFileType);
             $reader->setReadDataOnly(true);
@@ -103,10 +103,11 @@ class FileCounter
         $result = [];
         foreach ($data as $row => $cells) {
             foreach ($cells as $cell => $value) {
-                foreach ($this->characters as $character) {
+                foreach (self::CHARACTERS as $character) {
                     $result[$row][$cell][$character] = substr_count($value, $character);
                 }
                 $result[$row][$cell]['# of digits'] = preg_match_all("/[0-9]/", $value);
+                $result[$row][$cell]['# of words'] = preg_match_all("/[A-Z]/", $value);
                 $result[$row][$cell]['# of characters'] = strlen($value);
 
                 $result[$row][$cell]['Is date'] = $this->checkDate($result[$row][$cell]);
@@ -126,8 +127,8 @@ class FileCounter
      */
     private function checkDate(array $data): string
     {
-        if ($data['digits'] >= 4
-            && $data['characters'] === 0
+        if ($data['# of digits'] >= 4
+            && $data['# of words'] === 0
             && ((isset($data['.']) && $data['.'] > 1) || (isset($data['/']) && $data['/'] > 1))
         ) {
             return 'Yes';
@@ -143,8 +144,8 @@ class FileCounter
      */
     private function checkTime(array $data): string
     {
-        if ($data['digits'] >= 4
-            && $data['characters'] === 0
+        if ($data['# of digits'] >= 4
+            && $data['# of words'] === 0
             && ((isset($data[':']) && $data[':'] > 1) || (isset($data['.']) && $data['.'] > 1))
         ) {
             return 'Yes';
@@ -160,8 +161,8 @@ class FileCounter
      */
     private function checkNumber(array $data): string
     {
-        if ($data['digits'] > 0
-            && $data['characters'] === 0
+        if ($data['# of digits'] > 0
+            && $data['# of words'] === 0
             && (
                 (isset($data['.']) && $data['.'] < 2)
                 || (isset($data[' ']) && $data[' '] < 2)
