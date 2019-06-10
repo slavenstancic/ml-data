@@ -13,7 +13,16 @@ class FileCounter
     /** @var string */
     private const DIR = __DIR__ . '/../documents/';
 
+    /** @var array */
     private const CHARACTERS = ['/', ':', ',', '.', ' '];
+
+    private const DATA = 'Data';
+    private const DIGITS = '# of digits';
+    private const WORDS = '# of words';
+    private const CHARS = '# of characters';
+
+    /** @var int Max rows to read */
+    private const MAX_ROWS = 100;
 
     /**
      * FileCounter constructor.
@@ -36,28 +45,30 @@ class FileCounter
         $alphabet = range('A', 'Z');
         $data = $this->iterateFiles();
         $sheetIndex = 0;
+        $head = [];
 
         foreach ($data as $file => $row) {
             $newSheet = new Worksheet($spreadsheet, substr($file, 0, 28));
             $spreadsheet->addSheet($newSheet, $sheetIndex);
             $spreadsheet->setActiveSheetIndex($sheetIndex);
-            $spreadsheet->getActiveSheet()->getDefaultColumnDimension()->setWidth(20);
-            $spreadsheet->getActiveSheet()->getDefaultRowDimension()->setRowHeight(150);
+            $spreadsheet->getActiveSheet()->getDefaultColumnDimension()->setWidth(15);
+            $spreadsheet->getActiveSheet()->getDefaultRowDimension()->setRowHeight(15);
 
             foreach ($row as $rowNum => $column) {
                 foreach ($column as $columnNum => $data) {
-                    $column = sprintf('%s%d', $alphabet[$columnNum], $rowNum);
+                    $head = array_keys($data);
+                    $index = 0;
 
-                    $output = implode("\n", array_map(
-                        function ($v, $k) {
-                            return sprintf("%s%s = %s ", strlen($k) === 1 ? '# of ' : '', $k, $v);
-                        },
-                        $data,
-                        array_keys($data)
-                    ));
-
-                    $spreadsheet->getActiveSheet()->setCellValue($column, $output);
+                    foreach ($data as $type => $value) {
+                        $column = $alphabet[$index] . ($rowNum + 1);
+                        $spreadsheet->getActiveSheet()->setCellValue($column, $value);
+                        $index++;
+                    }
                 }
+            }
+
+            foreach ($head as $key => $title) {
+                $spreadsheet->getActiveSheet()->setCellValue($alphabet[$key] . 1, $title);
             }
 
             $sheetIndex++;
@@ -102,13 +113,20 @@ class FileCounter
     {
         $result = [];
         foreach ($data as $row => $cells) {
+            if ($row > self::MAX_ROWS) {
+                break;
+            }
+
             foreach ($cells as $cell => $value) {
+                $result[$row][$cell][self::DATA] = $value;
+
                 foreach (self::CHARACTERS as $character) {
                     $result[$row][$cell][$character] = substr_count($value, $character);
                 }
-                $result[$row][$cell]['# of digits'] = preg_match_all("/[0-9]/", $value);
-                $result[$row][$cell]['# of words'] = preg_match_all("/[A-Z]/", $value);
-                $result[$row][$cell]['# of characters'] = strlen($value);
+
+                $result[$row][$cell][self::DIGITS] = preg_match_all("/[0-9]/", $value);
+                $result[$row][$cell][self::WORDS] = preg_match_all("/[A-Z]/", $value);
+                $result[$row][$cell][self::CHARS] = strlen($value);
 
                 $result[$row][$cell]['Is date'] = $this->checkDate($result[$row][$cell]);
                 $result[$row][$cell]['Is time'] = $this->checkTime($result[$row][$cell]);
@@ -127,8 +145,8 @@ class FileCounter
      */
     private function checkDate(array $data): string
     {
-        if ($data['# of digits'] >= 4
-            && $data['# of words'] === 0
+        if ($data[self::DIGITS] >= 4
+            && $data[self::WORDS] === 0
             && ((isset($data['.']) && $data['.'] > 1) || (isset($data['/']) && $data['/'] > 1))
         ) {
             return 'Yes';
@@ -144,8 +162,8 @@ class FileCounter
      */
     private function checkTime(array $data): string
     {
-        if ($data['# of digits'] >= 4
-            && $data['# of words'] === 0
+        if ($data[self::DIGITS] >= 4
+            && $data[self::WORDS] === 0
             && ((isset($data[':']) && $data[':'] > 1) || (isset($data['.']) && $data['.'] > 1))
         ) {
             return 'Yes';
@@ -161,8 +179,8 @@ class FileCounter
      */
     private function checkNumber(array $data): string
     {
-        if ($data['# of digits'] > 0
-            && $data['# of words'] === 0
+        if ($data[self::DIGITS] > 0
+            && $data[self::WORDS] === 0
             && (
                 (isset($data['.']) && $data['.'] < 2)
                 || (isset($data[' ']) && $data[' '] < 2)
