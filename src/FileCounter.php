@@ -14,9 +14,10 @@ class FileCounter
     private const DIR = __DIR__ . '/../documents/';
 
     /** @var array */
-    private const CHARACTERS = ['/', ':', ',', '.', ' '];
+    private const CHARACTERS = ['/', ':', ',', '.'];
 
     private const DATA = 'Data';
+    private const SPACES = '# of spaces';
     private const DIGITS = '# of digits';
     private const WORDS = '# of words';
     private const CHARS = '# of characters';
@@ -54,16 +55,20 @@ class FileCounter
             $spreadsheet->getActiveSheet()->getDefaultColumnDimension()->setWidth(15);
             $spreadsheet->getActiveSheet()->getDefaultRowDimension()->setRowHeight(15);
 
+            $rowNumber = 2;
+
             foreach ($row as $rowNum => $column) {
                 foreach ($column as $columnNum => $data) {
                     $head = array_keys($data);
                     $index = 0;
 
                     foreach ($data as $type => $value) {
-                        $column = $alphabet[$index] . ($rowNum + 1);
+                        $column = $alphabet[$index] . $rowNumber;
                         $spreadsheet->getActiveSheet()->setCellValue($column, $value);
                         $index++;
                     }
+
+                    $rowNumber++;
                 }
             }
 
@@ -95,7 +100,7 @@ class FileCounter
             $reader->setReadDataOnly(true);
 
             $spreadsheet = $reader->load($filePath);
-            $content = $spreadsheet->getActiveSheet()->toArray();
+            $content = $spreadsheet->getActiveSheet();
             $result = $this->calculateData($content);
 
             $return[$file] = $result;
@@ -106,26 +111,33 @@ class FileCounter
 
     /**
      * Get calculation of characters
-     * @param array $data
+     *
+     * @param Worksheet $data
+     *
      * @return array
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
      */
-    private function calculateData(array $data): array
+    private function calculateData(Worksheet $data): array
     {
         $result = [];
-        foreach ($data as $row => $cells) {
-            if ($row > self::MAX_ROWS) {
-                break;
-            }
+        foreach ($data->getRowIterator(1, self::MAX_ROWS) as $row) {
+            $cells = $row->getCellIterator();
+            $cells->setIterateOnlyExistingCells(true);
+            $row = $row->getRowIndex();
 
-            foreach ($cells as $cell => $value) {
+            foreach ($cells as $cell) {
+                $value = $cell->getValue();
+                $cell = $cells->key();
+
                 $result[$row][$cell][self::DATA] = $value;
 
                 foreach (self::CHARACTERS as $character) {
                     $result[$row][$cell][$character] = substr_count($value, $character);
                 }
 
+                $result[$row][$cell][self::SPACES] = substr_count($value, ' ');
                 $result[$row][$cell][self::DIGITS] = preg_match_all("/[0-9]/", $value);
-                $result[$row][$cell][self::WORDS] = preg_match_all("/[A-Z]/", $value);
+                $result[$row][$cell][self::WORDS] = preg_match_all("/[A-Za-z]/i", $value);
                 $result[$row][$cell][self::CHARS] = strlen($value);
 
                 $result[$row][$cell]['Is date'] = $this->checkDate($result[$row][$cell]);
