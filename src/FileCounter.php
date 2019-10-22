@@ -10,28 +10,35 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class FileCounter
 {
-    /** @var string */
     private const DIR = __DIR__ . '/../documents/';
-
-    /** @var array */
-    private const CHARACTERS = ['/', ':', ',', '.'];
-
     private const DATA = 'Data';
-    private const SPACES = '# of spaces';
-    private const DIGITS = '# of digits';
-    private const WORDS = '# of words';
-    private const CHARS = '# of characters';
 
     /** @var int Max rows to read */
     private const MAX_ROWS = 100;
 
+    /** @var CellParserInterface[] */
+    private $cellParsers;
+
+    /** @var bool */
+    private $perRow;
+
+    /** @var array */
+    private $alphabet;
+
     /**
      * FileCounter constructor.
-     * @throws \PhpOffice\PhpSpreadsheet\Exception
+     *
+     * @param array $cellParsers
+     * @param bool  $perRow
+     *
      * @throws Exception
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
      */
-    public function __construct()
+    public function __construct(array $cellParsers, bool $perRow = false)
     {
+        $this->cellParsers = $cellParsers;
+        $this->perRow = $perRow;
+        $this->alphabet = range('A', 'Z');
         $this->countAllFilesData();
     }
 
@@ -52,7 +59,7 @@ class FileCounter
             $newSheet = new Worksheet($spreadsheet, substr($file, 0, 28));
             $spreadsheet->addSheet($newSheet, $sheetIndex);
             $spreadsheet->setActiveSheetIndex($sheetIndex);
-            $spreadsheet->getActiveSheet()->getDefaultColumnDimension()->setWidth(15);
+            $spreadsheet->getActiveSheet()->getDefaultColumnDimension()->setWidth(20);
             $spreadsheet->getActiveSheet()->getDefaultRowDimension()->setRowHeight(15);
 
             $rowNumber = 2;
@@ -80,7 +87,7 @@ class FileCounter
         }
 
         $writer = new Xlsx($spreadsheet);
-        $writer->save("results/result.xlsx");
+        $writer->save('results/result.xlsx');
     }
 
     /**
@@ -122,86 +129,39 @@ class FileCounter
         $result = [];
         foreach ($data->getRowIterator(1, self::MAX_ROWS) as $row) {
             $cells = $row->getCellIterator();
-            $cells->setIterateOnlyExistingCells(true);
+            try {
+                $cells->setIterateOnlyExistingCells(true);
+            } catch (\Exception $e) {
+                break;
+            }
             $row = $row->getRowIndex();
+            $rowVal = '';
 
             foreach ($cells as $cell) {
                 $value = $cell->getValue();
+
+                if ($this->perRow) {
+                    $rowVal .= $value;
+                    continue;
+                }
+
                 $cell = $cells->key();
 
                 $result[$row][$cell][self::DATA] = $value;
 
-                foreach (self::CHARACTERS as $character) {
-                    $result[$row][$cell][$character] = substr_count($value, $character);
+                foreach ($this->cellParsers as $cellParser) {
+                    $result[$row][$cell][$cellParser->getName()] = $cellParser->getValue($value);
                 }
+            }
 
-                $result[$row][$cell][self::SPACES] = substr_count($value, ' ');
-                $result[$row][$cell][self::DIGITS] = preg_match_all("/[0-9]/", $value);
-                $result[$row][$cell][self::WORDS] = preg_match_all("/[A-Za-z]/i", $value);
-                $result[$row][$cell][self::CHARS] = strlen($value);
-
-                $result[$row][$cell]['Is date'] = $this->checkDate($result[$row][$cell]);
-                $result[$row][$cell]['Is time'] = $this->checkTime($result[$row][$cell]);
-                $result[$row][$cell]['Is number'] = $this->checkNumber($result[$row][$cell]);
-
+            if ($this->perRow) {
+                foreach ($this->cellParsers as $cellParser) {
+                    $result[$row]['A'][self::DATA] = $rowVal;
+                    $result[$row]['A'][$cellParser->getName()] = $cellParser->getValue($rowVal);
+                }
             }
         }
 
         return $result;
-    }
-
-    /**
-     * Check if it is date format
-     * @param array $data
-     * @return string
-     */
-    private function checkDate(array $data): string
-    {
-        if ($data[self::DIGITS] >= 4
-            && $data[self::WORDS] === 0
-            && ((isset($data['.']) && $data['.'] > 1) || (isset($data['/']) && $data['/'] > 1))
-        ) {
-            return 'Yes';
-        }
-
-        return 'No';
-    }
-
-    /**
-     * Check if it is time format
-     * @param array $data
-     * @return string
-     */
-    private function checkTime(array $data): string
-    {
-        if ($data[self::DIGITS] >= 4
-            && $data[self::WORDS] === 0
-            && ((isset($data[':']) && $data[':'] > 1) || (isset($data['.']) && $data['.'] > 1))
-        ) {
-            return 'Yes';
-        }
-
-        return 'No';
-    }
-
-    /**
-     * Check if it is numeric format
-     * @param array $data
-     * @return string
-     */
-    private function checkNumber(array $data): string
-    {
-        if ($data[self::DIGITS] > 0
-            && $data[self::WORDS] === 0
-            && (
-                (isset($data['.']) && $data['.'] < 2)
-                || (isset($data[' ']) && $data[' '] < 2)
-                || (isset($data[',']) && $data[','] < 2)
-            )
-        ) {
-            return 'Yes';
-        }
-
-        return 'No';
     }
 }
